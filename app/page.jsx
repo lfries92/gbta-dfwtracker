@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import * as XLSX from 'xlsx';
 
 export default function ReferralTracker() {
   const [referrals, setReferrals] = useState([]);
@@ -17,10 +18,9 @@ export default function ReferralTracker() {
   useEffect(() => {
     const loadData = async () => {
       try {
-        const result = await window.storage.get('gbta-referrals');
-        if (result) {
-          setReferrals(JSON.parse(result.value));
-        }
+        const res = await fetch('/api/referrals');
+        const data = await res.json();
+        setReferrals(data.referrals || []);
       } catch (error) {
         console.log('Starting with empty tracker');
       }
@@ -31,7 +31,11 @@ export default function ReferralTracker() {
 
   const saveReferrals = async (newReferrals) => {
     try {
-      await window.storage.set('gbta-referrals', JSON.stringify(newReferrals));
+      await fetch('/api/referrals', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newReferrals),
+      });
     } catch (error) {
       console.error('Failed to save:', error);
     }
@@ -89,6 +93,31 @@ export default function ReferralTracker() {
 
   const recentActivity = [...referrals].reverse().slice(0, 5);
 
+  const handleExport = () => {
+    const dataRows = referrals.map((r) => ({
+      Referrer: r.referrerName,
+      'New Member': r.newMemberName,
+      Type: r.type,
+      Points: r.points,
+      Date: r.date,
+    }));
+
+    const leaderboardRows = leaderboard.map((entry, idx) => ({
+      Rank: idx + 1,
+      Recruiter: entry.name,
+      Direct: entry.direct,
+      Allied: entry.allied,
+      Points: entry.points,
+    }));
+
+    const wb = XLSX.utils.book_new();
+    const wsData = XLSX.utils.json_to_sheet(dataRows);
+    const wsLeaderboard = XLSX.utils.json_to_sheet(leaderboardRows);
+    XLSX.utils.book_append_sheet(wb, wsData, 'Referrals');
+    XLSX.utils.book_append_sheet(wb, wsLeaderboard, 'Leaderboard');
+    XLSX.writeFile(wb, `GBTA-DFW-Referrals-${new Date().toISOString().slice(0, 10)}.xlsx`);
+  };
+
   if (loading) {
     return (
       <div style={{display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', background: 'linear-gradient(to bottom right, #f0f9ff, #f3f4f6)'}}>
@@ -110,14 +139,19 @@ export default function ReferralTracker() {
       `}</style>
 
       <div style={{maxWidth: '1200px', margin: '0 auto'}}>
-        
-        <div style={{marginBottom: '2rem'}}>
-          <h1 style={{fontSize: '28px', fontWeight: 500, margin: '0 0 0.5rem', color: '#111827'}}>
-            GBTA-DFW Membership Drive
-          </h1>
-          <p style={{fontSize: '14px', color: '#6b7280', margin: 0}}>
-            August 1 – October 31, 2026 • {daysRemaining} days remaining
-          </p>
+
+        <div style={{marginBottom: '2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem'}}>
+          <div>
+            <h1 style={{fontSize: '28px', fontWeight: 500, margin: '0 0 0.5rem', color: '#111827'}}>
+              GBTA-DFW Membership Drive
+            </h1>
+            <p style={{fontSize: '14px', color: '#6b7280', margin: 0}}>
+              August 1 – October 31, 2026 • {daysRemaining} days remaining
+            </p>
+          </div>
+          <button onClick={handleExport} style={{padding: '0.6rem 1rem', background: '#111827', color: 'white', border: 'none', borderRadius: '6px', fontWeight: 500, fontSize: '13px', cursor: 'pointer'}}>
+            📥 Export to Excel
+          </button>
         </div>
 
         <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '12px', marginBottom: '2rem'}}>
@@ -148,7 +182,7 @@ export default function ReferralTracker() {
 
         <div style={{background: 'white', borderRadius: '12px', border: '1px solid #e5e7eb', padding: '1.25rem', marginBottom: '2rem', boxShadow: '0 1px 3px rgba(0,0,0,0.05)'}}>
           <h2 style={{fontSize: '16px', fontWeight: 500, margin: '0 0 1.5rem', color: '#111827'}}>Campaign Progress</h2>
-          
+
           <div style={{marginBottom: '2rem'}}>
             <div style={{display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem', alignItems: 'center'}}>
               <span style={{fontSize: '13px', fontWeight: 500, color: '#111827'}}>Direct Members (Travel Managers)</span>
@@ -177,7 +211,7 @@ export default function ReferralTracker() {
         </div>
 
         <div style={{display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '1.5rem', gridAutoFlow: 'dense'}}>
-          
+
           <div style={{background: 'white', borderRadius: '12px', border: '1px solid #e5e7eb', padding: '1.25rem', height: 'fit-content', boxShadow: '0 1px 3px rgba(0,0,0,0.05)'}}>
             <h2 style={{fontSize: '16px', fontWeight: 500, margin: '0 0 1rem', color: '#111827'}}>Add Referral</h2>
             <form onSubmit={handleAddReferral} style={{display: 'flex', flexDirection: 'column', gap: '1rem'}}>
